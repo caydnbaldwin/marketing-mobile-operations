@@ -44,7 +44,7 @@ start_palera1n() {
     cleanup_palera1n
     PALERA1N_FIFO=$(mktemp -u /tmp/palera1n_fifo_XXXX)
     mkfifo "$PALERA1N_FIFO"
-    exec 9>"$PALERA1N_FIFO"          # keep write end open so palera1n never gets EOF
+    exec 9<>"$PALERA1N_FIFO"         # O_RDWR open never blocks; keeps pipe alive so palera1n never gets EOF
     setsid palera1n "$@" < "$PALERA1N_FIFO" &
     PALERA1N_PID=$!
     trap "cleanup_palera1n" INT EXIT
