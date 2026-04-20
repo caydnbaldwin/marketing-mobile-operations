@@ -15,6 +15,12 @@ command -v palera1n >/dev/null 2>&1        || die "palera1n not found in PATH"
 command -v irecovery >/dev/null 2>&1       || die "irecovery not found in PATH"
 command -v ideviceinstaller >/dev/null 2>&1 || die "ideviceinstaller not found in PATH"
 
+# usbmuxd holds the USB interface open and causes palera1n to fail with
+# "Resource busy". Stop it before any palera1n runs; restore it before
+# ideviceinstaller needs it at the end.
+info "Stopping usbmuxd to free USB interface for palera1n..."
+systemctl stop usbmuxd 2>/dev/null || true
+
 PALERA1N_PID=""
 
 # Start palera1n in the background (non-blocking). Call stop_palera1n when done.
@@ -117,6 +123,10 @@ prompt "Press the Home button on the iPhone to reach the home screen, then press
 
 info "Waiting 10 seconds for device to settle..."
 sleep 10
+
+info "Restarting usbmuxd for app verification..."
+systemctl start usbmuxd 2>/dev/null || true
+sleep 3
 
 info "Verifying palera1n app is installed..."
 if ideviceinstaller -l 2>/dev/null | grep -qi "palera1n"; then
