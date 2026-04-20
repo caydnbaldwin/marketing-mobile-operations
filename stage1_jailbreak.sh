@@ -11,8 +11,9 @@ info()   { echo "[INFO]  $*"; }
 prompt() { echo; echo "[ACTION] $*"; read -rp "         Press Enter when ready..."; echo; }
 die()    { echo "[ERROR] $*" >&2; exit 1; }
 
-command -v palera1n >/dev/null 2>&1 || die "palera1n not found in PATH"
-command -v irecovery >/dev/null 2>&1 || die "irecovery not found in PATH"
+command -v palera1n >/dev/null 2>&1        || die "palera1n not found in PATH"
+command -v irecovery >/dev/null 2>&1       || die "irecovery not found in PATH"
+command -v ideviceinstaller >/dev/null 2>&1 || die "ideviceinstaller not found in PATH"
 
 PALERA1N_PID=""
 
@@ -86,41 +87,43 @@ echo "  Stage 1 — iPhone Jailbreak via palera1n"
 echo "============================================"
 echo
 
-# ── step 1 ───────────────────────────────────────────────────────────────────
-info "Step 1/5 — First palera1n run (create fs)"
+# ── step 1: create FakeFS ────────────────────────────────────────────────────
+info "Step 1/4 — palera1n -f -c (create FakeFS)"
 prompt "Ensure the iPhone is plugged in, then press Enter to begin."
 
 start_palera1n -f -c
-prompt "Hold Power + Home on the iPhone when palera1n prompts for DFU. Press Enter once pongoOS is booting."
+prompt "Hold Power + Home when palera1n prompts for DFU. Press Enter once pongoOS is booting."
 stop_palera1n
 
-# ── step 2 ───────────────────────────────────────────────────────────────────
-info "Step 2/5 — Second palera1n run (jailbreak)"
-wait_for_device "recovery" > /dev/null
+# ── step 2: jailbreak ────────────────────────────────────────────────────────
+info "Step 2/4 — palera1n -f (jailbreak)"
+wait_for_device "any" > /dev/null
 
-run_palera1n -f -c
-
-info "Jailbreak payload sent. Waiting for iPhone to reboot..."
-sleep 5
-state=$(wait_for_device "any")
-
-# ── step 3 ───────────────────────────────────────────────────────────────────
-info "Step 3/5 — Post-reboot state: $state — sending to recovery..."
 start_palera1n -f
-prompt "Hold Power + Home on the iPhone when palera1n prompts for DFU. Press Enter once pongoOS is booting."
+prompt "Hold Power + Home when palera1n prompts for DFU. Press Enter once pongoOS is booting."
 stop_palera1n
 
-# ── step 4 ───────────────────────────────────────────────────────────────────
-info "Step 4/5 — Final palera1n run (boot jailbroken)"
-wait_for_device "recovery" > /dev/null
+# ── step 3: boot jailbroken ──────────────────────────────────────────────────
+info "Step 3/4 — palera1n -f (boot jailbroken)"
+wait_for_device "any" > /dev/null
 
 run_palera1n -f
 
-# ── step 5 ───────────────────────────────────────────────────────────────────
-info "Step 5/5 — Waiting for iPhone to boot jailbroken..."
+# ── step 4: verify ───────────────────────────────────────────────────────────
+info "Step 4/4 — Waiting for iPhone to boot..."
 wait_for_device "normal" > /dev/null
 
-echo
-echo "============================================"
-echo "  Stage 1 complete — iPhone is jailbroken!"
-echo "============================================"
+prompt "Press the Home button on the iPhone to reach the home screen, then press Enter."
+
+info "Waiting 10 seconds for device to settle..."
+sleep 10
+
+info "Verifying palera1n app is installed..."
+if ideviceinstaller -l 2>/dev/null | grep -qi "palera1n"; then
+    echo
+    echo "============================================"
+    echo "  Stage 1 complete — iPhone is jailbroken!"
+    echo "============================================"
+else
+    die "palera1n app not found on device — jailbreak may not have completed successfully."
+fi
