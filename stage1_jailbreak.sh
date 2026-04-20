@@ -139,7 +139,7 @@ info "Step 1/4 — palera1n -f -c (create FakeFS)"
 prompt "Ensure the iPhone is plugged in, then press Enter to begin."
 
 start_palera1n -f -c
-prompt "Watch the palera1n output. When it says 'Press Enter when ready for DFU mode', press Enter here — then follow its countdown and hold Power+Home on the iPhone."
+prompt "Wait for palera1n to say 'Press Enter when ready for DFU mode'. Before pressing Enter here: place your thumb on Home and a finger on Power so your hands are already on the phone. Then press Enter — the countdown starts immediately. When the line changes from 'Hold home + power button' to 'Hold home button', release Power INSTANTLY and keep holding Home until DFU is confirmed."
 palera1n_enter
 wait_for_pongoos_and_stop
 
@@ -148,7 +148,7 @@ info "Step 2/4 — palera1n -f (jailbreak)"
 wait_for_device "any" > /dev/null
 
 start_palera1n -f
-prompt "Watch the palera1n output. When it says 'Press Enter when ready for DFU mode', press Enter here — then follow its countdown and hold Power+Home on the iPhone."
+prompt "Wait for palera1n to say 'Press Enter when ready for DFU mode'. Before pressing Enter here: place your thumb on Home and a finger on Power so your hands are already on the phone. Then press Enter — the countdown starts immediately. When the line changes from 'Hold home + power button' to 'Hold home button', release Power INSTANTLY and keep holding Home until DFU is confirmed."
 palera1n_enter
 wait_for_pongoos_and_stop
 
