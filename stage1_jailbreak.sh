@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# palera1n requires root to open the USB device node without a race condition
+# against udev setting permissions — re-exec with sudo if not already root.
+[ "$EUID" -eq 0 ] || exec sudo -E "$0" "$@"
+
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 info()   { echo "[INFO]  $*"; }
