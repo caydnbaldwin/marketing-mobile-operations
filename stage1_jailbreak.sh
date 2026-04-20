@@ -23,29 +23,39 @@ systemctl stop usbmuxd 2>/dev/null || true
 
 PALERA1N_PID=""
 
-# Start palera1n in the background (non-blocking). Call stop_palera1n when done.
-start_palera1n() {
-    setsid palera1n "$@" &
-    PALERA1N_PID=$!
-    trap "kill $PALERA1N_PID 2>/dev/null; true" INT EXIT
+# Kill any stray palera1n/checkra1n processes that may be holding the USB interface.
+cleanup_palera1n() {
+    pkill -9 -x palera1n  2>/dev/null || true
+    pkill -9 -x checkra1n 2>/dev/null || true
+    sleep 1
 }
 
-# Wait 10 seconds then kill the running palera1n process.
+# Start palera1n in the background (non-blocking). Call stop_palera1n when done.
+start_palera1n() {
+    cleanup_palera1n
+    setsid palera1n "$@" &
+    PALERA1N_PID=$!
+    trap "kill -9 -- -$PALERA1N_PID 2>/dev/null; true" INT EXIT
+}
+
+# Wait 10 seconds then kill palera1n and its entire process group.
 stop_palera1n() {
     info "pongoOS booting — stopping palera1n in 10 seconds..."
     sleep 10
-    kill "$PALERA1N_PID" 2>/dev/null || true
+    kill -9 -- -"$PALERA1N_PID" 2>/dev/null || true
     wait "$PALERA1N_PID" 2>/dev/null || true
     PALERA1N_PID=""
     trap - INT EXIT
+    cleanup_palera1n
     info "palera1n stopped — continuing..."
 }
 
 # Run palera1n and wait for it to exit naturally (no auto-kill).
 run_palera1n() {
+    cleanup_palera1n
     setsid palera1n "$@" &
     local pid=$!
-    trap "kill $pid 2>/dev/null; true" INT EXIT
+    trap "kill -9 -- -$pid 2>/dev/null; true" INT EXIT
     wait $pid || true
     trap - INT EXIT
     info "palera1n exited — continuing..."
