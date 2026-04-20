@@ -22,7 +22,7 @@ PALERA1N_PID=""
 
 cleanup_palera1n() {
     if [ -n "$PALERA1N_PID" ]; then
-        kill -9 -- -"$PALERA1N_PID" 2>/dev/null || true
+        kill -9 "$PALERA1N_PID" 2>/dev/null || true
         wait "$PALERA1N_PID" 2>/dev/null || true
         PALERA1N_PID=""
     fi
@@ -32,13 +32,9 @@ cleanup_palera1n() {
     sleep 1
 }
 
-# Run palera1n in the background with /dev/null stdin so palera1n skips its
-# own "Press Enter" prompt and starts the DFU countdown automatically.
-# This means no keyboard interaction is needed during the DFU sequence —
-# both hands stay on the phone the entire time.
 start_palera1n() {
     cleanup_palera1n
-    setsid palera1n "$@" < /dev/null &
+    palera1n "$@" &
     PALERA1N_PID=$!
     trap "cleanup_palera1n" INT EXIT
 }
@@ -68,9 +64,9 @@ wait_for_pongoos_and_stop() {
 # Run palera1n and wait for it to exit naturally (used for the final boot step).
 run_palera1n() {
     cleanup_palera1n
-    setsid palera1n "$@" < /dev/null &
+    palera1n "$@" &
     local pid=$!
-    trap "kill -9 -- -$pid 2>/dev/null; true" INT EXIT
+    trap "kill -9 $pid 2>/dev/null; true" INT EXIT
     wait $pid || true
     trap - INT EXIT
     info "palera1n exited — continuing..."
