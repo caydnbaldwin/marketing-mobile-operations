@@ -15,12 +15,15 @@ if [[ "${1:-}" == "--verify-palera1n" ]]; then
     exit 0
 fi
 
-systemctl stop usbmuxd 2>/dev/null || true
+# systemctl stop usbmuxd usbmuxd.socket ModemManager 2>/dev/null || true
+modprobe -r ipheth 2>/dev/null || true
 
 palera1n -f -c
+palera1n -f -c
+palera1n -f
 palera1n -f
 
-systemctl start usbmuxd
+systemctl start usbmuxd ModemManager 2>/dev/null || true
 sleep 3
 
 if ideviceinstaller -l -o list_all | grep -qi "palera1n"; then
