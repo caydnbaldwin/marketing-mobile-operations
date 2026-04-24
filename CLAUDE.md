@@ -28,7 +28,8 @@ marketing-mobile-operations/
 │   └── stage2_sileo_openssh.sh
 └── lib/              # functions (sourced)
     ├── print_help.sh
-    └── verify_palera1n_installed.sh
+    ├── verify_palera1n_installed.sh
+    └── wait_for_palera1n_installed.sh
 ```
 
 The split reflects two distinct layers (see "Dispatch layering" below). Don't nest `stages/` under `lib/` — `lib/` conventionally means sourced code, and stages are executables.
@@ -52,6 +53,7 @@ Shared functions live in `lib/`. The rules:
 - **No side effects at source time.** Only function definitions. Sourcing must be idempotent and free of I/O.
 - **Name functions in verb-first, declarative form**: `verify_*`, `ensure_*`, `install_*`, `wait_for_*`. Avoid generic names like `check_foo` or `do_foo`.
 - **Callers source explicitly.** Each caller (stage script or `run.sh`) sources only the libs it uses, via `source "$ROOT_DIR/lib/<name>.sh"`. No auto-loader — explicit dependencies make the import graph visible.
+- **Lib files do not source other lib files.** When a lib function depends on another (e.g. `wait_for_palera1n_installed` calls `verify_palera1n_installed`), document the dependency in the top-of-file comment and require the caller to source both. This keeps the dependency graph flat and visible at the call site.
 
 When adding a helper, first check `lib/` for an existing function before writing new inline logic.
 
@@ -104,19 +106,23 @@ Two distinct layers live under `run.sh`:
 
 ### Stage 1 — `stages/stage1_jailbreak.sh`
 
-Sequentially invokes palera1n four times, then verifies:
+Sequentially invokes palera1n four times, then polls for the installed app. **Two DFU holds total**, not four — calls 1 and 3 prompt for DFU; calls 2 and 4 continue from PongoOS over USB.
 
-1. `palera1n -f -c` — create FakeFS (first DFU entry)
-2. `palera1n -f -c` — second FakeFS pass (second DFU entry)
-3. `palera1n -f` — jailbreak (third DFU entry)
-4. `palera1n -f` — boot jailbroken OS (fourth DFU entry)
-5. Sleep 3s, then `ideviceinstaller -l -o list_all | grep -qi palera1n` to confirm the palera1n app installed.
+1. `palera1n -f -c` (call 1/4, **DFU needed**) — DFU → checkm8 → PongoOS boot → exits. Empirically, palera1n v2.2.1 on macOS drops the device after PongoOS boots, so a second invocation is required.
+2. `palera1n -f -c` (call 2/4, no DFU) — picks up from PongoOS over USB, uploads the FakeFS-creation ramdisk/overlay/kpf, chain-boots. Device creates FakeFS and reboots to stock iOS.
+3. `palera1n -f` (call 3/4, **DFU needed**) — DFU → checkm8 → PongoOS boot → exits. Same re-entry reason as call 1.
+4. `palera1n -f` (call 4/4, no DFU) — picks up from PongoOS, chain-boots the jailbroken kernel. Device boots into jailbroken iOS; palera1n app auto-installs.
+5. `wait_for_palera1n_installed` (from `lib/`) polls `verify_palera1n_installed` every 3s for up to 60s to absorb the post-jailbreak boot.
 
-Each `palera1n` invocation is a standalone process — the script relies on palera1n's own "Hold Power + Home" prompts for timing. There is no custom pongoOS watcher, process-group cleanup, or device-state detection; earlier versions had these but were simplified away.
+Defensive `sleep 2` between same-phase handoffs (calls 1→2 and 3→4) gives USB re-enumeration time to settle. No sleep between 2→3 because the DFU prompt on call 3 absorbs any delay.
 
-On macOS no host-side USB setup is needed — the kernel handles device muxing. On the older Ubuntu version this script called `modprobe -r ipheth` and `systemctl start usbmuxd`; both have been removed.
+Before each palera1n call the script prints a `[N/4]` phase label stating whether DFU is needed, so the operator doesn't have to watch raw palera1n output to know what's coming.
 
 The script accepts no flags — it is a pure workflow. To re-check device state without reflashing, use `run.sh --verify-palera1n-installed` (the atomic op), not stage 1.
+
+**Why 4 calls, not 2**: This is empirical. palera1n's single invocation should in theory do checkm8 → PongoOS boot → payload upload → chain-boot, but on this setup (palera1n v2.2.1, macOS arm64, iPhone 6s) it exits after booting PongoOS. A second invocation with the same flags sees the device already in PongoOS and completes the remaining work. Do not reduce to fewer calls without re-testing end-to-end on the target device.
+
+On macOS no host-side USB setup is needed — the kernel handles device muxing. The older Ubuntu version called `modprobe -r ipheth` and `systemctl start usbmuxd`; both have been removed.
 
 `set -euo pipefail` is active throughout.
 
