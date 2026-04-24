@@ -6,15 +6,14 @@ Automated workflow for preparing iPhones for use in marketing operations.
 
 ## Requirements
 
-- Ubuntu 24.04
+- macOS (tested on macOS 26 / Apple Silicon)
+- [Homebrew](https://brew.sh)
 - iPhone 6s running iOS 15.x
 - USB cable (Lightning)
 
 ---
 
-## Stage 1 — Jailbreak the iPhone
-
-### Step 1 — Install dependencies
+## Step 1 — Install dependencies
 
 **palera1n**
 
@@ -22,93 +21,125 @@ Automated workflow for preparing iPhones for use in marketing operations.
 sudo /bin/bash -c "$(curl -fsSL https://static.palera.in/scripts/install.sh)"
 ```
 
-**irecovery**
+**libimobiledevice tooling + sshpass**
 
 ```bash
-sudo apt-get install irecovery -y
+brew install libirecovery ideviceinstaller libusbmuxd libimobiledevice sshpass
 ```
 
-Verify both are installed:
+**pymobiledevice3**
 
 ```bash
-which palera1n && which irecovery
+pipx install pymobiledevice3   # or: pip3 install --user pymobiledevice3
 ```
 
-Both commands should print a file path. If either is blank, the install failed.
+If you don't have `pipx`, install it with `brew install pipx && pipx ensurepath`.
+
+Verify:
+
+```bash
+which palera1n && which irecovery && which ideviceinstaller && which iproxy && which sshpass
+```
+
+Every command should print a file path. If any is blank, the corresponding install failed.
 
 ---
 
-### Step 2 — Configure USB permissions
-
-Linux restricts direct USB access by default. Without this step, the script will hang with a `LIBUSB_ERROR_ACCESS` error.
-
-**Add a udev rule for Apple USB devices:**
+## Step 2 — Configure `.env`
 
 ```bash
-echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="05ac", MODE="0666", GROUP="plugdev"' | sudo tee /etc/udev/rules.d/39-apple-usb.rules
-sudo udevadm control --reload-rules && sudo udevadm trigger
+cp .env.example .env
 ```
 
-**Add your user to the `plugdev` group:**
+Edit `.env` and fill in:
 
-```bash
-sudo usermod -aG plugdev $USER
-```
-
-**Log out and log back in.** Group membership does not apply until you start a new session.
-
-**Verify your group membership:**
-
-```bash
-groups | grep plugdev
-```
-
-You should see `plugdev` in the output. If not, log out and back in again before proceeding.
+- `WIFI_SSID` — the SSID the iPhone should auto-join
+- `WIFI_PASS` — WPA2 password
+- `USB_SSH_PORT` — local port for the iproxy tunnel (default `2222`)
+- `SSH_PASS` — the root password you will set during the Sileo install (conventionally `alpine1`)
 
 ---
 
-### Step 3 — Run the script
+## Step 3 — Install the `mmo` command
 
-Plug the iPhone into the computer via USB, then run:
+One-time setup so you can invoke the program from anywhere:
 
 ```bash
-cd ~/marketing-mobile-operations
-./stage1_jailbreak.sh
+sudo ln -s "$(pwd)/run.sh" /usr/local/bin/mmo
 ```
+
+This symlinks `run.sh` into `/usr/local/bin` (already on macOS's default PATH). From now on, `mmo` runs the whole workflow; `mmo --help` shows the flag reference.
+
+To uninstall: `sudo rm /usr/local/bin/mmo`.
 
 ---
 
-### What to expect
+## Step 4 — Run the program
 
-The script will walk you through the process step by step. There are two points where you must physically interact with the iPhone — the script will tell you exactly when and what to do.
+Plug the iPhone into the Mac via USB, then run:
 
-| Prompt | What to do |
-|--------|-----------|
-| `Hold Power + Home when palera1n prompts for DFU` | Watch the palera1n output. When it says it is ready, hold the **Power** and **Home** buttons simultaneously on the iPhone. Hold until the script moves on. |
-| *(repeats once more)* | Same as above — the process requires two DFU entries. |
-
-Everything else is automated. The script detects device state, handles branching logic, and auto-stops palera1n at the right moments. When it finishes you will see:
-
+```bash
+mmo
 ```
-============================================
-  Stage 1 complete — iPhone is jailbroken!
-============================================
+
+That's the entry point for every use case. It runs the full workflow end-to-end:
+
+Under the hood, the pipeline runs five stages in sequence. Every line of output from the script itself is prefixed with `[MMO] ` so you can tell it apart from palera1n / checkra1n output.
+
+1. **Stage 1 — Jailbreak via palera1n.** `palera1n` is called four times. Calls 1 and 3 ask you to put the iPhone into DFU mode — hold **Power + Home** on the phone when palera1n prompts. Follow palera1n's own on-screen instructions.
+2. **Stage 1 verification.** The device is checked for the installed palera1n app.
+3. **Stage 2 — WiFi, Sileo, OpenSSH.** Walks you through:
+   - Pushing a WiFi config profile and installing it in Settings > General > VPN & Device Management. Device auto-joins `WIFI_SSID`.
+   - Opening the palera1n app and tapping Install Sileo; set the password to match `SSH_PASS`.
+   - Opening Sileo, accepting the analytics prompt, searching "openssh by Nick Chan", and installing the 4-package bundle.
+   - Tapping Messages on the home screen so iOS prompts for Local Network access (approve it).
+4. **Stage 2 verification.** From the Mac, over Wi-Fi as `mobile@<ip>`: pings the phone, confirms Sileo is installed, confirms SSH auth works, confirms `sudo` works. Prints a pass/fail table.
+5. **Stage 3 — iMessageGateway handoff.** Prints the exact `/setup-new-phone <ip>` command to paste into Claude Code next.
+
+When the pipeline finishes you should see `[MMO] All checks passed.` and the `/setup-new-phone` invocation.
+
+### Running subsets
+
+You rarely need this, but if something fails partway through you can re-run just one piece:
+
+```bash
+mmo -s1      # just the jailbreak
+mmo -s1v     # just stage 1 verification
+mmo -s2      # just the WiFi/Sileo/OpenSSH manual bridges
+mmo -s2v     # just stage 2 verification (prints the table)
+mmo -s3      # just the /setup-new-phone handoff
+mmo -vpi     # one-shot: is palera1n installed on this device right now?
+mmo -ksp     # cleanup: kill stale palera1n/checkra1n (prompts for sudo)
 ```
+
+`mmo --help` lists everything.
 
 ---
 
-### Troubleshooting
+## Checking if the phone is already jailbroken
+
+If you're not sure whether a device still has palera1n installed, check without re-running the whole workflow:
+
+```bash
+mmo --verify-palera1n-installed
+```
+
+Exits 0 and prints `palera1n successfully installed on device.` if it's there; exits 1 otherwise. `mmo --help` lists other atomic operations.
+
+---
+
+## Troubleshooting
 
 **`palera1n not found in PATH`**
-Re-run the palera1n install command from Step 1 and open a new terminal.
+Re-run the palera1n install command from Step 1 and open a new terminal. The script installs to `/usr/local/bin/palera1n`, which should already be on PATH.
 
-**`irecovery not found in PATH`**
-Re-run `sudo apt-get install irecovery -y` and open a new terminal.
+**`irecovery not found in PATH` / `ideviceinstaller not found`**
+Re-run the Homebrew install from Step 1.
 
-**`LIBUSB_ERROR_ACCESS` — script freezes after "Booting PongoOS"**
-You skipped or did not fully complete Step 2. Make sure you have logged out and back in after adding yourself to `plugdev`.
-
-**iPhone not detected / script times out waiting for device**
-- Try a different USB cable or port
+**iPhone not detected / palera1n times out waiting for device**
+- Try a different USB cable or port (prefer a direct Mac USB port over a hub)
 - Make sure the iPhone screen is on and unlocked before starting
-- Unplug and replug the iPhone, then re-run the script
+- Unplug and replug the iPhone, then re-run the program
+
+**"Allow this computer to access the device?" prompt on iPhone**
+Tap Trust on the iPhone, enter the passcode, then re-run.
