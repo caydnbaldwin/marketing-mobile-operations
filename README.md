@@ -84,14 +84,35 @@ mmo
 
 That's the entry point for every use case. It runs the full workflow end-to-end:
 
-1. **Jailbreak via palera1n.** `palera1n` is called four times. Each run asks you to put the iPhone into DFU mode — hold **Power + Home** on the phone when palera1n prompts. Follow palera1n's own on-screen instructions.
-2. **Post-jailbreak verification.** The device is checked for the installed palera1n app.
-3. **Wi-Fi.** A configuration profile is pushed to the iPhone. Tap Install in Settings > General > VPN & Device Management when prompted; the device auto-joins `WIFI_SSID`.
-4. **Sileo.** Open the palera1n app on the iPhone, tap Install Sileo, and set the root password to match `SSH_PASS`. The script pauses until you press Enter.
-5. **OpenSSH over USB.** The script brings up an `iproxy` tunnel, SSHes in as root, enables Sileo analytics, and installs OpenSSH.
-6. **Pass/fail summary.** Wi-Fi, Sileo, and OpenSSH are verified and printed as a table.
+Under the hood, the pipeline runs five stages in sequence. Every line of output from the script itself is prefixed with `[MMO] ` so you can tell it apart from palera1n / checkra1n output.
 
-When the program finishes you should see `All checks passed.`
+1. **Stage 1 — Jailbreak via palera1n.** `palera1n` is called four times. Calls 1 and 3 ask you to put the iPhone into DFU mode — hold **Power + Home** on the phone when palera1n prompts. Follow palera1n's own on-screen instructions.
+2. **Stage 1 verification.** The device is checked for the installed palera1n app.
+3. **Stage 2 — WiFi, Sileo, OpenSSH.** Walks you through:
+   - Pushing a WiFi config profile and installing it in Settings > General > VPN & Device Management. Device auto-joins `WIFI_SSID`.
+   - Opening the palera1n app and tapping Install Sileo; set the password to match `SSH_PASS`.
+   - Opening Sileo, accepting the analytics prompt, searching "openssh by Nick Chan", and installing the 4-package bundle.
+   - Tapping Messages on the home screen so iOS prompts for Local Network access (approve it).
+4. **Stage 2 verification.** From the Mac, over Wi-Fi as `mobile@<ip>`: pings the phone, confirms Sileo is installed, confirms SSH auth works, confirms `sudo` works. Prints a pass/fail table.
+5. **Stage 3 — iMessageGateway handoff.** Prints the exact `/setup-new-phone <ip>` command to paste into Claude Code next.
+
+When the pipeline finishes you should see `[MMO] All checks passed.` and the `/setup-new-phone` invocation.
+
+### Running subsets
+
+You rarely need this, but if something fails partway through you can re-run just one piece:
+
+```bash
+mmo -s1      # just the jailbreak
+mmo -s1v     # just stage 1 verification
+mmo -s2      # just the WiFi/Sileo/OpenSSH manual bridges
+mmo -s2v     # just stage 2 verification (prints the table)
+mmo -s3      # just the /setup-new-phone handoff
+mmo -vpi     # one-shot: is palera1n installed on this device right now?
+mmo -ksp     # cleanup: kill stale palera1n/checkra1n (prompts for sudo)
+```
+
+`mmo --help` lists everything.
 
 ---
 

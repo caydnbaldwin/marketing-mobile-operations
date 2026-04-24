@@ -4,33 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=.env
 source "$ROOT_DIR/.env"
-
-[ "$EUID" -eq 0 ] || exec sudo -E "$0" "$@"
-
-_ssh() {
-    sshpass -p "$SSH_PASS" ssh \
-        -p "$USB_SSH_PORT" \
-        -o StrictHostKeyChecking=no \
-        -o ConnectTimeout=10 \
-        root@localhost "$@"
-}
-
-wait_for_ssh() {
-    echo "Waiting for SSH..."
-    for _ in $(seq 1 30); do
-        if _ssh true 2>/dev/null; then
-            echo "SSH ready."
-            return 0
-        fi
-        sleep 2
-    done
-    echo "SSH not available after 60s." >&2
-    exit 1
-}
+source "$ROOT_DIR/lib/echo_mmo.sh"
 
 push_wifi_profile() {
-    local tmp
-    tmp=$(mktemp /tmp/wifi_XXXXXX.mobileconfig)
+    local tmpdir tmp
+    tmpdir=$(mktemp -d)
+    tmp="$tmpdir/wifi.mobileconfig"
     cat > "$tmp" <<PROFILE
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -59,91 +38,69 @@ push_wifi_profile() {
 </dict>
 </plist>
 PROFILE
-    python3 -m pymobiledevice3 profile install "$tmp"
-    rm -f "$tmp"
+    pymobiledevice3 profile install "$tmp"
+    rm -rf "$tmpdir"
 }
 
-# ── main ──────────────────────────────────────────────────────────────────
+echo_mmo "Stage 2: WiFi, Sileo, OpenSSH"
 
 sleep 2
 
-echo "Pushing WiFi configuration profile to device..."
+echo_mmo "Pushing WiFi configuration profile to device..."
 push_wifi_profile
 
-echo ""
-echo "============================================"
-echo "  On the iPhone:"
-echo "  Settings > General > VPN & Device Management"
-echo "  Tap 'Stage2 WiFi' > Install"
-echo "  The device will auto-join: ${WIFI_SSID}"
-echo "============================================"
-read -rp "Press Enter once the device is on WiFi... "
+cat <<EOF | echo_mmo
 
-echo ""
-echo "============================================"
-echo "  On the iPhone:"
-echo "  1. Open the palera1n app"
-echo "  2. Tap 'Install Sileo'"
-echo "  3. Set password:     alpine1"
-echo "  4. Confirm password: alpine1"
-echo "  Wait for Sileo to finish installing."
-echo "============================================"
-read -rp "Press Enter when Sileo is installed and password is set... "
+============================================
+  On the iPhone:
+  Settings > General > VPN & Device Management
+  Tap 'Stage2 WiFi' > Install
+  The device will auto-join: ${WIFI_SSID}
+============================================
+EOF
+read -rp "[MMO] Press Enter once the device is on WiFi... "
 
-iproxy "$USB_SSH_PORT" 22 &
-IPROXY_PID=$!
-trap 'kill "$IPROXY_PID" 2>/dev/null || true' EXIT
-sleep 2
+cat <<EOF | echo_mmo
 
-wait_for_ssh
+============================================
+  On the iPhone:
+  1. Open the palera1n app
+  2. Tap 'Install Sileo'
+  3. Set password:     ${SSH_PASS}
+  4. Confirm password: ${SSH_PASS}
+  Wait for Sileo to finish installing.
+  (This sets the password on the 'mobile' user,
+   which is who we SSH in as.)
+============================================
+EOF
+read -rp "[MMO] Press Enter when Sileo is installed and password is set... "
 
-echo "Accepting Sileo analytics..."
-_ssh "defaults write xyz.willy.Sileo sendAnalytics -bool YES 2>/dev/null || true"
+cat <<EOF | echo_mmo
 
-echo "Refreshing package sources..."
-_ssh "apt-get update -y 2>&1"
+============================================
+  On the iPhone, install OpenSSH via Sileo:
+  1. Open Sileo
+  2. Allow notifications, accept analytics
+  3. Search for: openssh by Nick Chan
+  4. Tap Get, then Queue (auto-selects 4 packages)
+  5. Confirm installation
+  6. Tap Done when install finishes
+  (OpenSSH must be installed here — palera1n does not ship
+   an SSH daemon by default.)
+============================================
+EOF
+read -rp "[MMO] Press Enter when OpenSSH is installed... "
 
-echo "Installing OpenSSH by Nick Chan..."
-_ssh "apt-get install -y openssh 2>&1"
+cat <<EOF | echo_mmo
 
-verify() {
-    local wifi_ok=false sileo_ok=false openssh_count=0 all_ok=true
-
-    if _ssh "ping -c 1 -W 3 8.8.8.8" >/dev/null 2>&1; then
-        wifi_ok=true
-    fi
-
-    if _ssh "dpkg-query -W -f='\${Status}' sileo 2>/dev/null" | grep -q "install ok installed"; then
-        sileo_ok=true
-    fi
-
-    openssh_count=$(_ssh "dpkg -l 2>/dev/null | awk '/^ii.*openssh/{c++} END{print c+0}'" 2>/dev/null || echo 0)
-
-    local wifi_status sileo_status openssh_status
-    if $wifi_ok;   then wifi_status="OK";    else wifi_status="FAIL";                     all_ok=false; fi
-    if $sileo_ok;  then sileo_status="OK";   else sileo_status="FAIL";                    all_ok=false; fi
-    if [ "$openssh_count" -ge 4 ]; then
-        openssh_status="OK ($openssh_count packages)"
-    else
-        openssh_status="FAIL ($openssh_count packages)"
-        all_ok=false
-    fi
-
-    echo ""
-    echo "============================================"
-    echo "  Stage 2 Verification"
-    echo "============================================"
-    printf "  %-26s %s\n" "WiFi (${WIFI_SSID}):" "$wifi_status"
-    printf "  %-26s %s\n" "Sileo:"               "$sileo_status"
-    printf "  %-26s %s\n" "OpenSSH:"              "$openssh_status"
-    echo "============================================"
-
-    if $all_ok; then
-        echo "  All checks passed."
-    else
-        echo "  One or more checks failed." >&2
-        exit 1
-    fi
-}
-
-verify
+============================================
+  On the iPhone:
+  Tap Messages on the home screen and wait
+  for it to finish loading. If prompted,
+  approve Local Network access.
+  (This grants the permission the
+   iMessageGateway tweak needs — without it,
+   setup-new-phone fails with EHOSTUNREACH.)
+============================================
+EOF
+read -rp "[MMO] Press Enter once Messages has finished loading... "
