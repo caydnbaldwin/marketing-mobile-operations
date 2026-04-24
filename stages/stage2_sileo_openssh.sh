@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=.env
-source "$SCRIPT_DIR/.env"
+source "$ROOT_DIR/.env"
 
 [ "$EUID" -eq 0 ] || exec sudo -E "$0" "$@"
 
@@ -65,7 +65,6 @@ PROFILE
 
 # ── main ──────────────────────────────────────────────────────────────────
 
-systemctl start usbmuxd 2>/dev/null || true
 sleep 2
 
 echo "Pushing WiFi configuration profile to device..."
