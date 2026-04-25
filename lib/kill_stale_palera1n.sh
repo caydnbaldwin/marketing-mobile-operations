@@ -23,10 +23,10 @@ kill_stale_palera1n() {
     local pids
     pids=$(pgrep -f "$pattern" 2>/dev/null || true)
     if [ -z "$pids" ]; then
-        echo_mmo "No stale palera1n processes found."
+        echo_mmo INFO "No stale palera1n processes found."
         return 0
     fi
-    echo_mmo "Killing stale palera1n processes: $(echo "$pids" | tr '\n' ' ')"
+    echo_mmo INFO "Killing stale palera1n processes: $(echo "$pids" | tr '\n' ' ')"
     sudo pkill -9 -f "$pattern" 2>/dev/null || true
     return 0
 }

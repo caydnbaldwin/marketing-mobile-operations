@@ -33,7 +33,7 @@ get_wifi_ip() {
     sleep 2
 
     if ! kill -0 "$iproxy_pid" 2>/dev/null; then
-        echo_mmo "iproxy failed to start on port $USB_SSH_PORT" >&2
+        echo_mmo FAILURE "iproxy failed to start on port $USB_SSH_PORT" >&2
         return 1
     fi
 
@@ -51,7 +51,7 @@ get_wifi_ip() {
     kill "$iproxy_pid" 2>/dev/null || true
 
     if [ -z "$wifi_ip" ]; then
-        echo_mmo "Phone reports no IPv4 address on en0" >&2
+        echo_mmo FAILURE "Phone reports no IPv4 address on en0" >&2
         return 1
     fi
 

@@ -40,6 +40,11 @@ case "${1:-}" in
         source "$ROOT_DIR/lib/kill_stale_palera1n.sh"
         kill_stale_palera1n
         ;;
+    --set-device-language|-sdl)
+        source "$ROOT_DIR/lib/echo_mmo.sh"
+        source "$ROOT_DIR/lib/set_device_language.sh"
+        set_device_language "${2:-en}" "${3:-en_US}"
+        ;;
     -h|--help)
         print_help
         exit 0

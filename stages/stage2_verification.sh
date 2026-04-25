@@ -11,14 +11,14 @@ source "$ROOT_DIR/lib/verify_sileo_installed.sh"
 source "$ROOT_DIR/lib/verify_ssh_as_mobile.sh"
 source "$ROOT_DIR/lib/verify_sudo_as_mobile.sh"
 
-echo_mmo "Stage 2 verification"
+echo_mmo HEADER "Stage 2 verification"
 
-echo_mmo "Discovering phone WiFi IP..."
+echo_mmo INFO "Discovering phone WiFi IP..."
 WIFI_IP=$(get_wifi_ip) || {
-    echo_mmo "Could not determine phone WiFi IP. Ensure the phone is on WiFi and plugged into USB." >&2
+    echo_mmo FAILURE "Could not determine phone WiFi IP. Ensure the phone is on WiFi and plugged into USB." >&2
     exit 1
 }
-echo_mmo "Phone WiFi IP: $WIFI_IP"
+echo_mmo INFO "Phone WiFi IP: $WIFI_IP"
 
 # Prime ~/.ssh/known_hosts for this IP so the /setup-new-phone skill's
 # plain `ssh mobile@<ip>` doesn't prompt on first contact. Wipe any stale
@@ -37,21 +37,21 @@ sileo_status="FAIL";   $sileo_ok  && sileo_status="OK"
 ssh_status="FAIL";     $ssh_ok    && ssh_status="OK"
 sudo_status="FAIL";    $sudo_ok   && sudo_status="OK"
 
-cat <<EOF | echo_mmo
+cat <<EOF | echo_mmo INFO
 
 ============================================
   Stage 2 verification ($WIFI_IP)
 ============================================
 EOF
-printf '[MMO]   %-26s %s\n' "WiFi (${WIFI_SSID}):"    "$wifi_status"
-printf '[MMO]   %-26s %s\n' "Sileo:"                  "$sileo_status"
-printf '[MMO]   %-26s %s\n' "OpenSSH (mobile@):"      "$ssh_status"
-printf '[MMO]   %-26s %s\n' "sudo (mobile -> root):"  "$sudo_status"
-echo_mmo "============================================"
+printf '[MMO] [INFO]   %-26s %s\n' "WiFi (${WIFI_SSID}):"    "$wifi_status"
+printf '[MMO] [INFO]   %-26s %s\n' "Sileo:"                  "$sileo_status"
+printf '[MMO] [INFO]   %-26s %s\n' "OpenSSH (mobile@):"      "$ssh_status"
+printf '[MMO] [INFO]   %-26s %s\n' "sudo (mobile -> root):"  "$sudo_status"
+echo_mmo INFO "============================================"
 
 if $all_ok; then
-    echo_mmo "All checks passed."
+    echo_mmo SUCCESS "All checks passed."
 else
-    echo_mmo "One or more checks failed." >&2
+    echo_mmo FAILURE "One or more checks failed." >&2
     exit 1
 fi

@@ -5,10 +5,10 @@
 
 verify_palera1n_installed() {
     if ideviceinstaller list --all 2>/dev/null | grep -qi "palera1n"; then
-        echo_mmo "palera1n successfully installed on device."
+        echo_mmo SUCCESS "palera1n successfully installed on device."
         return 0
     else
-        echo_mmo "palera1n not found on device." >&2
+        echo_mmo FAILURE "palera1n not found on device." >&2
         return 1
     fi
 }

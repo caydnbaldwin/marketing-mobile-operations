@@ -88,11 +88,11 @@ Under the hood, the pipeline runs five stages in sequence. Every line of output 
 
 1. **Stage 1 — Jailbreak via palera1n.** `palera1n` is called four times. Calls 1 and 3 ask you to put the iPhone into DFU mode — hold **Power + Home** on the phone when palera1n prompts. Follow palera1n's own on-screen instructions.
 2. **Stage 1 verification.** The device is checked for the installed palera1n app.
-3. **Stage 2 — WiFi, Sileo, OpenSSH.** Walks you through:
-   - Pushing a WiFi config profile and installing it in Settings > General > VPN & Device Management. Device auto-joins `WIFI_SSID`.
-   - Opening the palera1n app and tapping Install Sileo; set the password to match `SSH_PASS`.
-   - Opening Sileo, accepting the analytics prompt, searching "openssh by Nick Chan", and installing the 4-package bundle.
-   - Tapping Messages on the home screen so iOS prompts for Local Network access (approve it).
+3. **Stage 2 — WiFi, Sileo, OpenSSH, Local Network.** Two manual taps plus two automated steps:
+   - *(manual)* Push a WiFi config profile and install it in Settings > General > VPN & Device Management. Device auto-joins `WIFI_SSID`.
+   - *(manual)* Open the palera1n app, tap Install Sileo, set the password to `SSH_PASS`. This is also what unlocks dropbear authentication for the next two steps.
+   - *(automated)* Install OpenSSH on the phone via `apt-get install openssh` run over palera1n's bundled dropbear SSH on port 44 (USB). No taps.
+   - *(semi-automated)* Bring Messages to the foreground via `uiopen sms://` over the same dropbear tunnel; iOS shows the Local Network permission prompt — tap Allow.
 4. **Stage 2 verification.** From the Mac, over Wi-Fi as `mobile@<ip>`: pings the phone, confirms Sileo is installed, confirms SSH auth works, confirms `sudo` works. Prints a pass/fail table.
 5. **Stage 3 — iMessageGateway handoff.** Prints the exact `/setup-new-phone <ip>` command to paste into Claude Code next.
 
@@ -105,7 +105,7 @@ You rarely need this, but if something fails partway through you can re-run just
 ```bash
 mmo -s1      # just the jailbreak
 mmo -s1v     # just stage 1 verification
-mmo -s2      # just the WiFi/Sileo/OpenSSH manual bridges
+mmo -s2      # just stage 2 (WiFi+Sileo manual taps; OpenSSH+Messages automated via dropbear)
 mmo -s2v     # just stage 2 verification (prints the table)
 mmo -s3      # just the /setup-new-phone handoff
 mmo -vpi     # one-shot: is palera1n installed on this device right now?

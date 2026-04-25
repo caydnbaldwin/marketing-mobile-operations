@@ -19,6 +19,8 @@ Stages (full workflows):
 Atomic operations (individual lib/ functions):
     -vpi, --verify-palera1n-installed  One-shot check for the palera1n app on the device
     -ksp, --kill-stale-palera1n        Kill any leftover palera1n/checkra1n processes (prompts for sudo)
+    -sdl, --set-device-language        Set device UI language + locale via lockdownd (defaults: en en_US)
+                                       Optional args: -sdl <lang> <locale>, e.g. -sdl es es_ES
 
 Other:
     -h,   --help                       Show this help
