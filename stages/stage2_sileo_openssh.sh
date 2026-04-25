@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=.env
 source "$ROOT_DIR/.env"
 source "$ROOT_DIR/lib/echo_mmo.sh"
+source "$ROOT_DIR/lib/run_via_dropbear.sh"
+source "$ROOT_DIR/lib/install_openssh_via_dropbear.sh"
+source "$ROOT_DIR/lib/trigger_local_network_prompt.sh"
 
 push_wifi_profile() {
     local tmpdir tmp
@@ -42,14 +45,15 @@ PROFILE
     rm -rf "$tmpdir"
 }
 
-echo_mmo "Stage 2: WiFi, Sileo, OpenSSH"
+echo_mmo HEADER "Stage 2: WiFi, Sileo, OpenSSH, Local Network"
 
 sleep 2
 
-echo_mmo "Pushing WiFi configuration profile to device..."
+# --- Manual bridge 1: WiFi profile install -----------------------------------
+echo_mmo INFO "Pushing WiFi configuration profile to device..."
 push_wifi_profile
 
-cat <<EOF | echo_mmo
+cat <<EOF | echo_mmo INFO
 
 ============================================
   On the iPhone:
@@ -60,7 +64,8 @@ cat <<EOF | echo_mmo
 EOF
 read -rp "[MMO] Press Enter once the device is on WiFi... "
 
-cat <<EOF | echo_mmo
+# --- Manual bridge 2: Install Sileo (this sets mobile's password) ------------
+cat <<EOF | echo_mmo INFO
 
 ============================================
   On the iPhone:
@@ -69,38 +74,31 @@ cat <<EOF | echo_mmo
   3. Set password:     ${SSH_PASS}
   4. Confirm password: ${SSH_PASS}
   Wait for Sileo to finish installing.
-  (This sets the password on the 'mobile' user,
-   which is who we SSH in as.)
+  (Sets the password on the 'mobile' user;
+   the next two steps SSH in as that user
+   over dropbear/USB to finish setup.)
 ============================================
 EOF
 read -rp "[MMO] Press Enter when Sileo is installed and password is set... "
 
-cat <<EOF | echo_mmo
+# --- Automated bridge 3: install OpenSSH via dropbear over USB ---------------
+echo_mmo INFO "Installing OpenSSH via Procursus apt over dropbear (USB)..."
+install_openssh_via_dropbear
 
-============================================
-  On the iPhone, install OpenSSH via Sileo:
-  1. Open Sileo
-  2. Allow notifications, accept analytics
-  3. Search for: openssh by Nick Chan
-  4. Tap Get, then Queue (auto-selects 4 packages)
-  5. Confirm installation
-  6. Tap Done when install finishes
-  (OpenSSH must be installed here — palera1n does not ship
-   an SSH daemon by default.)
-============================================
-EOF
-read -rp "[MMO] Press Enter when OpenSSH is installed... "
+# --- Semi-automated bridge 4: launch Messages so iOS surfaces the prompt -----
+echo_mmo INFO "Launching Messages on the phone over dropbear..."
+trigger_local_network_prompt
 
-cat <<EOF | echo_mmo
+cat <<EOF | echo_mmo INFO
 
 ============================================
   On the iPhone:
-  Tap Messages on the home screen and wait
-  for it to finish loading. If prompted,
-  approve Local Network access.
-  (This grants the permission the
-   iMessageGateway tweak needs — without it,
-   setup-new-phone fails with EHOSTUNREACH.)
+  Approve the 'Local Network' permission
+  prompt for Messages (if shown).
+  (Without it the iMessageGateway tweak
+   later fails with EHOSTUNREACH. If the
+   prompt doesn't appear, permission was
+   already granted — just press Enter.)
 ============================================
 EOF
-read -rp "[MMO] Press Enter once Messages has finished loading... "
+read -rp "[MMO] Press Enter once the Local Network prompt is approved (or absent)... "

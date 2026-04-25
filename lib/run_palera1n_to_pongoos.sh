@@ -16,7 +16,9 @@
 #
 # Returns 0 if PongoOS was detected and palera1n was terminated.
 # Returns 1 if palera1n exited before PongoOS appeared, or detection
-# timed out (5 minutes).
+# timed out (15 minutes — bumped from 11 because slow phones on the
+# FakeFS-creation call were still tripping the shorter budget; tighter
+# timeouts force the operator into a full rerun).
 #
 # Requires echo_mmo to be in scope (source lib/echo_mmo.sh first).
 # Meant to be sourced. Do not execute directly.
@@ -25,15 +27,17 @@ run_palera1n_to_pongoos() {
     palera1n "$@" &
     local pal_pid=$!
 
-    local timeout=300
+    local timeout=900
     local start=$SECONDS
+    local last_heartbeat=0
+    local elapsed
 
     while kill -0 "$pal_pid" 2>/dev/null; do
         if ioreg -p IOUSB -l 2>/dev/null | grep -qiE 'pongo|idProduct.*= 16705'; then
             # Let PongoOS finish initializing on the device before we pull the plug on the host.
             sleep 3
-            echo_mmo ""
-            echo_mmo "(PongoOS detected on USB — terminating palera1n so the next call can continue)"
+            echo ""
+            echo_mmo INFO "(PongoOS detected on USB — terminating palera1n so the next call can continue)"
             kill -INT "$pal_pid" 2>/dev/null || true
             sleep 2
             kill -KILL "$pal_pid" 2>/dev/null || true
@@ -42,18 +46,29 @@ run_palera1n_to_pongoos() {
             return 0
         fi
 
-        if (( SECONDS - start >= timeout )); then
-            echo_mmo "" >&2
-            echo_mmo "Timed out waiting for PongoOS on USB after ${timeout}s" >&2
+        elapsed=$((SECONDS - start))
+
+        if (( elapsed >= timeout )); then
+            echo "" >&2
+            echo_mmo FAILURE "Timed out waiting for PongoOS on USB after ${timeout}s" >&2
             kill -KILL "$pal_pid" 2>/dev/null || true
             pkill -KILL -P "$pal_pid" 2>/dev/null || true
             wait "$pal_pid" 2>/dev/null || true
             return 1
         fi
+
+        # Heartbeat every 60s while we wait. palera1n's own output runs
+        # interleaved here, so the [MMO] prefix is what makes our progress
+        # line stand out.
+        if (( elapsed >= last_heartbeat + 60 && elapsed > 0 )); then
+            last_heartbeat=$elapsed
+            echo_mmo WARNING "Still waiting for PongoOS on USB (${elapsed}s elapsed of ${timeout}s)..."
+        fi
+
         sleep 1
     done
 
     wait "$pal_pid" 2>/dev/null || true
-    echo_mmo "palera1n exited before PongoOS appeared on USB" >&2
+    echo_mmo FAILURE "palera1n exited before PongoOS appeared on USB" >&2
     return 1
 }
