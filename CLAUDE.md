@@ -28,14 +28,18 @@ marketing-mobile-operations/
 │   ├── stage1_verification.sh      # verifies stage 1 end state
 │   ├── stage2_sileo_openssh.sh     # WiFi + Sileo (manual) -> OpenSSH + Local Network (auto via dropbear)
 │   ├── stage2_verification.sh      # discovers IP, runs 4 checks, renders table
-│   └── stage3_imessagegateway.sh   # /setup-new-phone skill handoff
+│   ├── stage3_imessagegateway.sh   # auto-invokes /setup-new-phone skill via claude -p
+│   └── stage3_verification.sh      # verifies phone number registered + prints summary
 └── lib/                            # functions (sourced)
     ├── echo_mmo.sh                       # [MMO] prefix print helper
+    ├── get_phone_number.sh               # MSISDN via pymobiledevice3 lockdown get
     ├── get_wifi_ip.sh                    # phone WiFi IP via brief USB SSH (port 22, post-OpenSSH)
     ├── install_openssh_via_dropbear.sh   # apt-installs OpenSSH over dropbear (port 44, post-Sileo)
     ├── kill_stale_palera1n.sh            # cleanup for orphaned palera1n/checkra1n
     ├── print_help.sh                     # run.sh usage text
+    ├── print_setup_summary.sh            # IP/pass/phone-number readout for stage 3 verification
     ├── run_palera1n_to_pongoos.sh        # palera1n + auto-kill at PongoOS boot
+    ├── run_setup_new_phone_skill.sh      # invokes /setup-new-phone Claude skill via claude -p
     ├── run_via_dropbear.sh               # generic SSH-as-mobile over dropbear/USB helper
     ├── set_device_language.sh            # lockdownd-set UI language + locale (idempotent; pre-jailbreak OK)
     ├── trigger_local_network_prompt.sh   # uiopen sms:// over dropbear to surface iOS permission prompt
@@ -79,16 +83,16 @@ Two distinct layers live under `run.sh`:
 
 - **Stages** (`stage*_*.sh`) — workflows that orchestrate multiple atomic ops. They accept no flags of their own; they exist to be run top-to-bottom as a unit. Two kinds coexist:
   - **Main stages** (`stage1_jailbreak.sh`, `stage2_sileo_openssh.sh`, `stage3_imessagegateway.sh`) — do the work (jailbreak, install, hand off).
-  - **Verification stages** (`stage1_verification.sh`, `stage2_verification.sh`) — prove the phone is in the expected end state after a main stage. Independently runnable; useful for re-checking a phone without re-running the main work.
+  - **Verification stages** (`stage1_verification.sh`, `stage2_verification.sh`, `stage3_verification.sh`) — prove the phone is in the expected end state after a main stage. Independently runnable; useful for re-checking a phone without re-running the main work.
 - **Atomic operations** (`lib/*.sh`) — single-purpose functions. Called as functions by stages. Only a small subset is exposed as run.sh flags.
 
-`run.sh` is the sole dispatcher. **It composes main and verification stages** into the default full run (`mmo` with no args runs stage1 → stage1_verification → stage2 → stage2_verification → stage3). Main stages do **not** call verification stages themselves — `run.sh` owns the sequencing. If you run a main stage in isolation (e.g. `mmo -s1`) it does the work but does not verify; run the verification flag separately (`mmo -s1v`).
+`run.sh` is the sole dispatcher. **It composes main and verification stages** into the default full run (`mmo` with no args runs stage1 → stage1_verification → stage2 → stage2_verification → stage3 → stage3_verification). Main stages do **not** call verification stages themselves — `run.sh` owns the sequencing. If you run a main stage in isolation (e.g. `mmo -s1`) it does the work but does not verify; run the verification flag separately (`mmo -s1v`).
 
 Flag conventions:
 
-- `--stageN`, `--stageN-verification`, `--stage3` — dispatches to the corresponding stage script.
-- `--<function_name>` (matching a `lib/` filename) — run a single atomic op. Reserved for ops with a real standalone use case (currently `--verify-palera1n-installed`, `--kill-stale-palera1n`, `--set-device-language`).
-- Every long flag has a short form built from the first letter of each word: `--stage1` / `-s1`, `--stage1-verification` / `-s1v`, `--verify-palera1n-installed` / `-vpi`, `--kill-stale-palera1n` / `-ksp`, `--set-device-language` / `-sdl`. Case-by-case resolution if two long flags collapse to the same short form.
+- `--stageN`, `--stageN-verification` — dispatches to the corresponding stage script.
+- `--<function_name>` (matching a `lib/` filename) — run a single atomic op. Reserved for ops with a real standalone use case (currently `--verify-palera1n-installed`, `--kill-stale-palera1n`, `--set-device-language`, `--run-setup-new-phone-skill`).
+- Every long flag has a short form built from the first letter of each word: `--stage1` / `-s1`, `--stage1-verification` / `-s1v`, `--verify-palera1n-installed` / `-vpi`, `--kill-stale-palera1n` / `-ksp`, `--set-device-language` / `-sdl`, `--run-setup-new-phone-skill` / `-rsnps`. Case-by-case resolution if two long flags collapse to the same short form.
 
 **Not every `lib/` function is exposed as a flag.** Most atomic verify ops (`verify_wifi_reachable`, `verify_sileo_installed`, `verify_ssh_as_mobile`, `verify_sudo_as_mobile`) are only used internally by `stage2_verification.sh`. The useful unit for the operator is the verification stage (`-s2v`), not the individual checks. Expose a function as a flag only when running it standalone is a real user need.
 
@@ -136,14 +140,17 @@ Every lib function that prints must document "Requires echo_mmo to be in scope" 
 ## Running the scripts
 
 ```bash
-./run.sh                                # full pipeline: s1 -> s1v -> s2 -> s2v -> s3
+./run.sh                                # full pipeline: s1 -> s1v -> s2 -> s2v -> s3 -> s3v
 ./run.sh -s1                            # just the jailbreak (no verify)
 ./run.sh -s1v                           # verify stage 1 end state
 ./run.sh -s2                            # WiFi profile + Sileo + OpenSSH (manual bridges)
 ./run.sh -s2v                           # verify stage 2 end state (prints table)
-./run.sh -s3                            # print /setup-new-phone handoff
+./run.sh -s3                            # auto-invoke /setup-new-phone skill via claude -p
+./run.sh -s3v                           # verify phone number registered + print setup summary
 ./run.sh -vpi                           # atomic: one-shot palera1n-app check
 ./run.sh -ksp                           # atomic: kill stale palera1n/checkra1n (prompts for sudo)
+./run.sh -rsnps                         # atomic: run /setup-new-phone skill (auto-discovers IP)
+./run.sh -rsnps 10.10.130.58 alpine1    # atomic: run /setup-new-phone skill with explicit IP/pass
 ./run.sh --help                         # show usage
 ```
 
@@ -247,8 +254,36 @@ If reconfig flows become common — i.e. re-running stage 2 on phones where some
 
 ### Stage 3 — `stages/stage3_imessagegateway.sh`
 
-Discovers the WiFi IP (via `get_wifi_ip`, same as stage 2 verification), then prints the exact `/setup-new-phone <ip>` command the operator should paste into Claude Code. This is a handoff, not a workflow — the actual iMessageGateway deploy happens inside the `/setup-new-phone` skill, which runs through Claude.
+Discovers the WiFi IP (via `get_wifi_ip`, same as stage 2 verification), then auto-invokes the `/setup-new-phone` Claude skill via `claude -p` (`run_setup_new_phone_skill`). The skill streams its output to the terminal so the operator can watch tool calls in real time, but cannot intervene mid-flight.
 
 The skill lives at `~/.claude/skills/setup-new-phone/SKILL.md`. Do not edit it from this project; stage 3 is its counterpart on the shell side.
 
-IP rediscovery is redundant with stage 2 verification when the full pipeline runs, but it makes stage 3 self-contained: `mmo -s3` works standalone on an already-set-up phone (e.g. if the operator closed their Claude Code session and wants the handoff line again).
+**Two-phase flow with an operator pause for the SIM swap**:
+
+1. **Deploy pass** — `claude -p "/setup-new-phone <ip> <pass>"` deploys the tweak, sets the LaunchDaemon, prompts the iOS Local Network grant. The first event in the stream-json output is `system/init` with a `session_id`; the function captures it via `tee` to a temp file + post-stream `jq`.
+2. **Operator pause** — `read -rp "Insert SIM, toggle iMessage off then on, wait for the phone number to register, then press Enter…"`. This is the same pattern stage 2 uses for its WiFi/Sileo manual bridges: deterministic shell on either side of a human action.
+3. **Reverify pass** — `claude --resume <session_id> -p "reverify"`. Resuming the same Claude session means the skill still has the deploy context (knows which phone, what tweak version, what already worked), so "reverify" is enough — no need to repass IP/password. Mirrors how the skill is used interactively.
+
+**Why `--output-format stream-json --verbose` + jq instead of plain `-p`**: default `-p` text output buffers until the whole pass completes — minutes of silence followed by a wall of text. stream-json emits each event (assistant text, tool calls, tool results) as it happens; the jq filter renders them as `→ ToolName <input>` and `← <result>` lines so the operator sees a running log. Tool inputs/outputs are truncated to 240 chars to keep the log skimmable; if you ever need full payloads, drop the `.[0:240]` clamps.
+
+**Why `--dangerously-skip-permissions`**: the skill issues many SSH, scp, and sudo tool calls. In a non-interactive `claude -p` invocation each one would otherwise block on a prompt with no human there to approve it. The skill is deterministic and only touches the target phone + the local tweak `.deb` files, so bypassing prompts is the right call here. Don't reuse this pattern for skills that mutate broader state.
+
+**Why capture session_id from stream-json instead of `--continue`**: `claude --continue` resumes "the most recent conversation in the current directory," which is fragile — if the operator runs any other claude command between the two passes (or `mmo -s3` is invoked from a different cwd than expected), `--continue` grabs the wrong session. Pinning the session_id from pass 1's `system/init` event guarantees pass 2 resumes the right conversation.
+
+**Standalone use**: `mmo -rsnps` exposes `run_setup_new_phone_skill` directly. With no args it auto-discovers the IP and uses `$SSH_PASS` from `.env`; with `-rsnps <ip> <pass>` it skips discovery. Useful for re-running the deploy on a phone that's already past stage 2 (e.g. after a tweak rebuild) without re-doing IP discovery if you already know it. The two-phase pause still happens — press Enter to skip if you're not actually swapping the SIM this run.
+
+IP rediscovery is redundant with stage 2 verification when the full pipeline runs, but it makes stage 3 self-contained: `mmo -s3` works standalone on an already-set-up phone.
+
+### Stage 3 verification — `stages/stage3_verification.sh`
+
+Proves the SIM-related half of stage 3 actually took, and prints the end-of-pipeline readout the operator needs (IP, SSH password, registered phone number).
+
+1. **Discover WiFi IP** via `get_wifi_ip` (same probe as stage 2 verification — keeps s3v independently runnable).
+2. **Query phone number** via `get_phone_number` → `pymobiledevice3 lockdown get --key PhoneNumber`. Lockdownd populates this once the SIM is inserted and registered with the carrier; if the operator forgot to swap the SIM (or it hasn't registered yet), the call returns empty.
+3. **Render summary** via `print_setup_summary "$WIFI_IP" "$SSH_PASS"` — `IP address`, `SSH password`, `Phone number`. On missing number, prints `(unavailable)` and the lib returns 1, which s3v escalates to a hard failure with a remediation hint.
+
+**Why `pymobiledevice3 lockdown get` and not SSH-grep `/var/wireless/...`**: lockdownd already exposes `PhoneNumber` as a documented key, queryable over USB without root, no hunting through commcenter plists. Same channel s2v uses for `apps list`, so no new dependencies. If the key ever becomes unreliable on this iOS/palera1n combo, the fallback would be `defaults read /var/wireless/Library/Preferences/com.apple.commcenter` over SSH-as-root — but that's brittle (binary plist, key name varies by carrier).
+
+**Why a verification stage and not just an inline summary at the end of stage 3**: matches the s1v/s2v pattern — main stages do work, verification stages confirm end state and are independently re-runnable. After a failed SIM swap the operator can fix it and re-run `mmo -s3v` to confirm + see the readout, without re-doing the whole tweak deploy.
+
+**No atomic-op flag for `print_setup_summary` or `get_phone_number`**: same reasoning as s2v's verify libs — running them standalone isn't a real user need. The operator-facing unit is `mmo -s3v`.
