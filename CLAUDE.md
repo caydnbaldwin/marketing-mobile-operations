@@ -49,6 +49,7 @@ marketing-mobile-operations/
     ├── verify_device_language.sh
     ├── verify_palera1n_installed.sh
     ├── verify_sileo_installed.sh
+    ├── verify_device_reachable.sh        # lockdownd reachability precheck (catches pymobiledevice3 ERROR-but-exit-0)
     ├── verify_ssh_as_mobile.sh
     ├── verify_sudo_as_mobile.sh
     ├── verify_wifi_reachable.sh
@@ -224,7 +225,9 @@ Two atomic ops to pick between for ad-hoc checks:
 
 Runs after stage 1 verification passes. Drives two manual bridges (WiFi profile install, Install Sileo in the palera1n app) and then automates the next two (OpenSSH install, Local Network permission prompt) over palera1n's bundled dropbear SSH on port 44. Does **no** verification — that's `stage2_verification.sh`'s job.
 
-1. **WiFi push** — `push_wifi_profile` generates a `.mobileconfig` from `WIFI_SSID`/`WIFI_PASS` and pushes it via `pymobiledevice3 profile install` over USB (lockdownd).
+The stage opens with `verify_device_reachable` because **`pymobiledevice3` has a quirk: it logs `ERROR Device is not connected` to stderr but exits 0**, so `set -e` doesn't trip and downstream calls silently no-op. Without this precheck, the operator would see "Tap Install on the WiFi profile" prompts for a profile that was never pushed. The precheck captures stdout+stderr and treats any `ERROR` line — or empty output — as a hard failure with remediation hints (cable, port, Trust dialog, force-restart).
+
+1. **WiFi push** — `push_wifi_profile` generates a `.mobileconfig` from `WIFI_SSID`/`WIFI_PASS` and pushes it via `pymobiledevice3 profile install` over USB (lockdownd). Captures stderr and re-checks for `ERROR` patterns inside the function as a belt-and-suspenders against the same quirk; the precheck above should have caught a fully-disconnected device, but transient/partial failures can still leak through.
 2. **WiFi install** *(manual bridge)* — pauses while operator taps Install in Settings > General > VPN & Device Management. Device auto-joins. Apple gates silent profile install behind device supervision (which requires wiping the phone), so we accept this tap.
 3. **Sileo install** *(semi-automated bridge)* — the script auto-launches the palera1n loader app via `launch_app_via_ddi` (Apple's DVT instrumentation interface, after `pymobiledevice3 mounter auto-mount`). This works pre-Sileo because lockdownd serves DDI over plain USB without needing master.passwd. Operator then taps Install Sileo, sets the password to match `SSH_PASS` in `.env` (conventionally `alpine1`), and presses Enter on the Mac. After the prompt, the script auto-launches Sileo via `uiopen sileo://` over dropbear (which now authenticates because mobile finally has a hash). On rootful palera1n with this build, the password sets on the `mobile` user, not `root` — SSH-as-root doesn't work on these phones regardless, so everything downstream targets `mobile@…`. **This step is also what unlocks dropbear authentication** — until mobile has a hash in `/etc/master.passwd`, nothing can SSH in (root is permanently locked with `!`). That's why bridges 4 and 5 must run *after* this one, not before, and why the post-prompt Sileo launch uses dropbear while the pre-prompt palera1n launch uses DDI.
 

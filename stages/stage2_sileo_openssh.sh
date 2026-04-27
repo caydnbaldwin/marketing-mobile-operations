@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=.env
 source "$ROOT_DIR/.env"
 source "$ROOT_DIR/lib/echo_mmo.sh"
+source "$ROOT_DIR/lib/verify_device_reachable.sh"
 source "$ROOT_DIR/lib/run_via_dropbear.sh"
 source "$ROOT_DIR/lib/install_openssh_via_dropbear.sh"
 source "$ROOT_DIR/lib/trigger_local_network_prompt.sh"
@@ -13,7 +14,7 @@ source "$ROOT_DIR/lib/launch_app_via_ddi.sh"
 source "$ROOT_DIR/lib/launch_sileo_app.sh"
 
 push_wifi_profile() {
-    local tmpdir tmp
+    local tmpdir tmp out rc=0
     tmpdir=$(mktemp -d)
     tmp="$tmpdir/wifi.mobileconfig"
     cat > "$tmp" <<PROFILE
@@ -44,11 +45,20 @@ push_wifi_profile() {
 </dict>
 </plist>
 PROFILE
-    pymobiledevice3 profile install "$tmp"
+    # pymobiledevice3 logs "ERROR Device is not connected" but exits 0, so we
+    # capture stderr and inspect it ourselves. Treat any ERROR line as failure.
+    out=$(pymobiledevice3 profile install "$tmp" 2>&1) || rc=$?
     rm -rf "$tmpdir"
+    if [ "$rc" -ne 0 ] || printf '%s' "$out" | grep -q "ERROR"; then
+        echo_mmo FAILURE "WiFi profile install failed: ${out:-no output}" >&2
+        return 1
+    fi
+    return 0
 }
 
 echo_mmo HEADER "Stage 2: WiFi, Sileo, OpenSSH, Local Network"
+
+verify_device_reachable
 
 sleep 2
 
