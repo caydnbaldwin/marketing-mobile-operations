@@ -32,10 +32,13 @@ marketing-mobile-operations/
 │   └── stage3_verification.sh      # verifies phone number registered + prints summary
 └── lib/                            # functions (sourced)
     ├── echo_mmo.sh                       # [MMO] prefix print helper
+    ├── get_palera1n_bundle_id.sh         # finds palera1n loader bundle ID via apps list
     ├── get_phone_number.sh               # MSISDN via pymobiledevice3 lockdown get
     ├── get_wifi_ip.sh                    # phone WiFi IP via brief USB SSH (port 22, post-OpenSSH)
     ├── install_openssh_via_dropbear.sh   # apt-installs OpenSSH over dropbear (port 44, post-Sileo)
     ├── kill_stale_palera1n.sh            # cleanup for orphaned palera1n/checkra1n
+    ├── launch_app_via_ddi.sh             # launches an app by bundle ID (mounts DDI if needed)
+    ├── launch_sileo_app.sh               # uiopen sileo:// over dropbear (post-Sileo)
     ├── print_help.sh                     # run.sh usage text
     ├── print_setup_summary.sh            # IP/pass/phone-number readout for stage 3 verification
     ├── run_palera1n_to_pongoos.sh        # palera1n + auto-kill at PongoOS boot
@@ -223,7 +226,9 @@ Runs after stage 1 verification passes. Drives two manual bridges (WiFi profile 
 
 1. **WiFi push** — `push_wifi_profile` generates a `.mobileconfig` from `WIFI_SSID`/`WIFI_PASS` and pushes it via `pymobiledevice3 profile install` over USB (lockdownd).
 2. **WiFi install** *(manual bridge)* — pauses while operator taps Install in Settings > General > VPN & Device Management. Device auto-joins. Apple gates silent profile install behind device supervision (which requires wiping the phone), so we accept this tap.
-3. **Sileo install** *(manual bridge)* — operator opens the palera1n app, taps Install Sileo, and sets the password to match `SSH_PASS` in `.env` (conventionally `alpine1`). On rootful palera1n with this build, the password sets on the `mobile` user, not `root` — SSH-as-root doesn't work on these phones regardless, so everything downstream targets `mobile@…`. **This step is also what unlocks dropbear authentication** — until mobile has a hash in `/etc/master.passwd`, nothing can SSH in (root is permanently locked with `!`). That's why bridges 3 and 4 must run *after* this one, not before.
+3. **Sileo install** *(semi-automated bridge)* — the script auto-launches the palera1n loader app via `launch_app_via_ddi` (Apple's DVT instrumentation interface, after `pymobiledevice3 mounter auto-mount`). This works pre-Sileo because lockdownd serves DDI over plain USB without needing master.passwd. Operator then taps Install Sileo, sets the password to match `SSH_PASS` in `.env` (conventionally `alpine1`), and presses Enter on the Mac. After the prompt, the script auto-launches Sileo via `uiopen sileo://` over dropbear (which now authenticates because mobile finally has a hash). On rootful palera1n with this build, the password sets on the `mobile` user, not `root` — SSH-as-root doesn't work on these phones regardless, so everything downstream targets `mobile@…`. **This step is also what unlocks dropbear authentication** — until mobile has a hash in `/etc/master.passwd`, nothing can SSH in (root is permanently locked with `!`). That's why bridges 4 and 5 must run *after* this one, not before, and why the post-prompt Sileo launch uses dropbear while the pre-prompt palera1n launch uses DDI.
+
+   **Why DDI for palera1n launch and `uiopen` for Sileo launch?** DDI is heavy (mounter auto-mount downloads the matching DeveloperDiskImage on first run, ~hundreds of MB cached locally) but works pre-Sileo. `uiopen` over dropbear is light but needs mobile's password to be set, which only happens during the manual Sileo install in this same bridge. We pick the right tool for each side of the gate. Both auto-launch calls are best-effort: if either fails, the script emits a `WARNING` and the operator opens the app manually — no abort.
 4. **OpenSSH install** *(automated)* — `install_openssh_via_dropbear` runs `apt-get install -y openssh` on the phone over `run_via_dropbear`. Idempotent. Replaces the prior "open Sileo, search 'openssh by Nick Chan', tap Get" manual bridge.
 5. **Local Network prompt** *(semi-automated)* — `trigger_local_network_prompt` runs `uiopen sms://` over the same dropbear tunnel, which brings Messages to the foreground and lets iOS surface the Local Network prompt. Operator still taps Allow on the prompt; the grant itself lives in `/private/var/preferences/com.apple.networkextension.plist` as an NSKeyedArchiver-serialized blob (NOT in TCC.db on iOS 15) and isn't safely shell-writable. Skipping this means the iMessageGateway tweak later fails with `EHOSTUNREACH` that looks like a network issue but isn't.
 

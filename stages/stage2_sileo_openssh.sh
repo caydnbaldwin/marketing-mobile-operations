@@ -8,6 +8,9 @@ source "$ROOT_DIR/lib/echo_mmo.sh"
 source "$ROOT_DIR/lib/run_via_dropbear.sh"
 source "$ROOT_DIR/lib/install_openssh_via_dropbear.sh"
 source "$ROOT_DIR/lib/trigger_local_network_prompt.sh"
+source "$ROOT_DIR/lib/get_palera1n_bundle_id.sh"
+source "$ROOT_DIR/lib/launch_app_via_ddi.sh"
+source "$ROOT_DIR/lib/launch_sileo_app.sh"
 
 push_wifi_profile() {
     local tmpdir tmp
@@ -65,14 +68,22 @@ EOF
 read -rp "[MMO] Press Enter once the device is on WiFi... "
 
 # --- Manual bridge 2: Install Sileo (this sets mobile's password) ------------
+echo_mmo INFO "Opening palera1n loader app on the phone..."
+PALERA1N_BUNDLE_ID=$(get_palera1n_bundle_id || true)
+if [ -n "$PALERA1N_BUNDLE_ID" ]; then
+    launch_app_via_ddi "$PALERA1N_BUNDLE_ID" || true
+else
+    echo_mmo WARNING "Could not auto-detect palera1n loader bundle ID — open the app manually."
+fi
+
 cat <<EOF | echo_mmo INFO
 
 ============================================
-  On the iPhone:
-  1. Open the palera1n app
-  2. Tap 'Install Sileo'
-  3. Set password:     ${SSH_PASS}
-  4. Confirm password: ${SSH_PASS}
+  On the iPhone (palera1n app should now be
+  open; if not, open it from the Home screen):
+  1. Tap 'Install Sileo'
+  2. Set password:     ${SSH_PASS}
+  3. Confirm password: ${SSH_PASS}
   Wait for Sileo to finish installing.
   (Sets the password on the 'mobile' user;
    the next two steps SSH in as that user
@@ -80,6 +91,9 @@ cat <<EOF | echo_mmo INFO
 ============================================
 EOF
 read -rp "[MMO] Press Enter when Sileo is installed and password is set... "
+
+echo_mmo INFO "Opening Sileo on the phone..."
+launch_sileo_app || true
 
 # --- Automated bridge 3: install OpenSSH via dropbear over USB ---------------
 echo_mmo INFO "Installing OpenSSH via Procursus apt over dropbear (USB)..."
