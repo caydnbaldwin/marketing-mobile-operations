@@ -49,6 +49,7 @@ marketing-mobile-operations/
     ├── verify_ssh_as_mobile.sh
     ├── verify_sudo_as_mobile.sh
     ├── verify_wifi_reachable.sh
+    ├── wait_for_lockdownd.sh             # post-boot wait so instant lockdownd queries don't fail-fast
     └── wait_for_palera1n_installed.sh
 ```
 
@@ -204,10 +205,11 @@ On macOS no host-side USB setup is needed — the kernel handles device muxing. 
 
 ### Stage 1 verification — `stages/stage1_verification.sh`
 
-Two checks, in order:
+Three steps, in order:
 
-1. `verify_device_language en en_US` — confirms `set_device_language` stuck through stage 1's reboots. Hard-fails fast (lockdownd query is instant) so the operator can re-run `mmo -sdl` without waiting on the longer palera1n poll. Wrong language at this point usually means lockdownd was busy when stage 1 ran the preflight; just re-run `-sdl` then `-s1v`.
-2. `wait_for_palera1n_installed` — polls `verify_palera1n_installed` every 3s for up to 180s to absorb the post-jailbreak boot. Emits a `WARNING` heartbeat every 30s so the operator knows it's still trying.
+1. `wait_for_lockdownd` — polls `pymobiledevice3 lockdown info` every 3s for up to 120s. Stage 1's last `palera1n -f` call returns the instant the kernel starts booting, not when iOS is up; lockdownd doesn't come back online until ~30-60s later. Without this wait, the next step's instant lockdownd query hard-fails for purely timing reasons. On a fully-booted phone (e.g. standalone `mmo -s1v` re-runs) the first poll succeeds in <1s, so the cost outside the post-stage-1 case is ~zero.
+2. `verify_device_language en en_US` — confirms `set_device_language` stuck through stage 1's reboots. Hard-fails fast (lockdownd query is instant *now that we've waited for it*) so the operator can re-run `mmo -sdl` without waiting on the longer palera1n poll. Wrong language at this point usually means lockdownd was busy when stage 1 ran the preflight; just re-run `-sdl` then `-s1v`.
+3. `wait_for_palera1n_installed` — polls `verify_palera1n_installed` every 3s for up to 180s to absorb the rest of the post-jailbreak boot (lockdownd comes up before SpringBoard finishes installing the palera1n app). Emits a `WARNING` heartbeat every 30s so the operator knows it's still trying.
 
 Both are hard-fail (any non-zero return aborts the script under `set -euo pipefail`); we don't aggregate into a table because the value of stage 1 verification is a fast pass-or-stop signal for the pipeline, not a full state report.
 
