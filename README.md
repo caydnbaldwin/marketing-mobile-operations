@@ -35,10 +35,16 @@ pipx install pymobiledevice3   # or: pip3 install --user pymobiledevice3
 
 If you don't have `pipx`, install it with `brew install pipx && pipx ensurepath`.
 
+**Claude Code CLI**
+
+Stage 3 invokes the `/setup-new-phone` skill via `claude -p`. Install Claude Code from <https://claude.com/claude-code> if you don't have it. Verify with `claude --version`.
+
+`jq` is also required (used to render Claude's streaming output as readable text). It ships with recent macOS by default; install with `brew install jq` if `which jq` comes back empty.
+
 Verify:
 
 ```bash
-which palera1n && which irecovery && which ideviceinstaller && which iproxy && which sshpass
+which palera1n && which irecovery && which ideviceinstaller && which iproxy && which sshpass && which claude && which jq
 ```
 
 Every command should print a file path. If any is blank, the corresponding install failed.
@@ -84,7 +90,7 @@ mmo
 
 That's the entry point for every use case. It runs the full workflow end-to-end:
 
-Under the hood, the pipeline runs five stages in sequence. Every line of output from the script itself is prefixed with `[MMO] ` so you can tell it apart from palera1n / checkra1n output.
+Under the hood, the pipeline runs six stages in sequence. Every line of output from the script itself is prefixed with `[MMO] ` so you can tell it apart from palera1n / checkra1n output.
 
 1. **Stage 1 — Jailbreak via palera1n.** `palera1n` is called four times. Calls 1 and 3 ask you to put the iPhone into DFU mode — hold **Power + Home** on the phone when palera1n prompts. Follow palera1n's own on-screen instructions.
 2. **Stage 1 verification.** The device is checked for the installed palera1n app.
@@ -94,9 +100,10 @@ Under the hood, the pipeline runs five stages in sequence. Every line of output 
    - *(automated)* Install OpenSSH on the phone via `apt-get install openssh` run over palera1n's bundled dropbear SSH on port 44 (USB). No taps.
    - *(semi-automated)* Bring Messages to the foreground via `uiopen sms://` over the same dropbear tunnel; iOS shows the Local Network permission prompt — tap Allow.
 4. **Stage 2 verification.** From the Mac, over Wi-Fi as `mobile@<ip>`: pings the phone, confirms Sileo is installed, confirms SSH auth works, confirms `sudo` works. Prints a pass/fail table.
-5. **Stage 3 — iMessageGateway handoff.** Prints the exact `/setup-new-phone <ip>` command to paste into Claude Code next.
+5. **Stage 3 — iMessageGateway deployment.** Auto-invokes the `/setup-new-phone` Claude skill via `claude -p` in two passes: pass 1 deploys the tweak; the script then pauses while you insert the SIM, toggle iMessage off/on, and wait for the phone number to register; pass 2 resumes the same Claude session with `reverify`. Tool calls stream to the terminal (rendered through `jq`) so you can watch.
+6. **Stage 3 verification.** Reads the registered phone number via `pymobiledevice3 lockdown get` and prints the final readout — IP address, SSH password, phone number. Hard-fails if the SIM didn't register.
 
-When the pipeline finishes you should see `[MMO] All checks passed.` and the `/setup-new-phone` invocation.
+When the pipeline finishes you should see `[MMO] [SUCCESS] Phone setup complete` followed by the IP / SSH password / phone number summary.
 
 ### Running subsets
 
@@ -107,7 +114,9 @@ mmo -s1      # just the jailbreak
 mmo -s1v     # just stage 1 verification
 mmo -s2      # just stage 2 (WiFi+Sileo manual taps; OpenSSH+Messages automated via dropbear)
 mmo -s2v     # just stage 2 verification (prints the table)
-mmo -s3      # just the /setup-new-phone handoff
+mmo -s3      # just stage 3: auto-invoke /setup-new-phone skill (deploy + SIM-swap pause + reverify)
+mmo -s3v     # just stage 3 verification: confirm phone number registered + print summary
+mmo -rsnps   # invoke the /setup-new-phone skill standalone (e.g. after a tweak rebuild)
 mmo -vpi     # one-shot: is palera1n installed on this device right now?
 mmo -ksp     # cleanup: kill stale palera1n/checkra1n (prompts for sudo)
 ```
