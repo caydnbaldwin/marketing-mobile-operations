@@ -6,6 +6,11 @@
 # right after stage 1 (e.g. `verify_device_language`) hard-fails for no reason
 # other than timing. This wait absorbs the post-boot gap.
 #
+# Important: pymobiledevice3 has a quirk where it logs "ERROR Device is not
+# connected" to stderr but exits 0, so a naive `pymobiledevice3 ... && return`
+# treats every poll as success and the loop returns instantly. We capture
+# stdout+stderr and require ERROR-free output to count as a real success.
+#
 # 120s budget covers the slow-boot case with margin; on a fully-booted phone
 # the first poll succeeds in <1s so there's no real cost when invoked
 # standalone (e.g. `mmo -s1v` on a long-running phone).
@@ -17,9 +22,10 @@
 
 wait_for_lockdownd() {
     echo_mmo INFO "Waiting for lockdownd to come back after reboot (up to 120s)..."
-    local i seconds
+    local i seconds out
     for i in $(seq 1 40); do
-        if pymobiledevice3 lockdown info >/dev/null 2>&1; then
+        out=$(pymobiledevice3 lockdown info 2>&1) || true
+        if [ -n "$out" ] && ! printf '%s' "$out" | grep -q "ERROR"; then
             return 0
         fi
         # Heartbeat at 30s, 60s, 90s — but not at 120s
