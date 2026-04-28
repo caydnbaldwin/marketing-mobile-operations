@@ -16,9 +16,10 @@
 #
 # Returns 0 if PongoOS was detected and palera1n was terminated.
 # Returns 1 if palera1n exited before PongoOS appeared, or detection
-# timed out (15 minutes — bumped from 11 because slow phones on the
-# FakeFS-creation call were still tripping the shorter budget; tighter
-# timeouts force the operator into a full rerun).
+# timed out (30 minutes — bumped from 15 after the FakeFS-creation
+# call ("Please wait up to 10 minutes for the fakefs to be created")
+# kept tripping the shorter budget on slow phones; tighter timeouts
+# force the operator into a full rerun).
 #
 # Requires echo_mmo to be in scope (source lib/echo_mmo.sh first).
 # Meant to be sourced. Do not execute directly.
@@ -27,7 +28,7 @@ run_palera1n_to_pongoos() {
     palera1n "$@" &
     local pal_pid=$!
 
-    local timeout=900
+    local timeout=1800
     local start=$SECONDS
     local last_heartbeat=0
     local elapsed
