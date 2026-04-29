@@ -9,11 +9,14 @@
 #   HEADER   — stage banner, e.g. "Stage 1: Jailbreak (palera1n)"
 #   INFO     — neutral progress / status line
 #   SUCCESS  — positive confirmation ("palera1n installed", "All checks passed")
+#   SKIP     — step skipped because a probe found it already satisfied.
+#              Used by the probe-first pattern in main stages so reruns
+#              against an already-set-up phone visibly elide finished work.
 #   WARNING  — non-fatal: long poll heartbeat, transient retry, soft anomaly.
 #              Use for "the thing isn't done yet, but we're not giving up."
 #   FAILURE  — error path; usually paired with `>&2`
 # Other strings are accepted verbatim (printed in the brackets) but the
-# five above are the canonical set across the project.
+# six above are the canonical set across the project.
 #
 # Colors (24-bit ANSI, auto-disabled when stdout is not a TTY, or when
 # NO_COLOR=1 is set per https://no-color.org). The [MMO] prefix is the
@@ -21,6 +24,7 @@
 #   HEADER   #00d7ff (cyan)
 #   INFO     #a8a8a8 (gray)
 #   SUCCESS  #5fd700 (green)
+#   SKIP     #5f5f5f (dim gray — visually muted vs. INFO)
 #   WARNING  #ffaf00 (amber)
 #   FAILURE  #ff5f5f (red)
 # The message body itself is left in the terminal's default color —
@@ -53,6 +57,7 @@ echo_mmo() {
             HEADER)  type_color=$'\033[38;2;0;215;255m'   ;;  # #00d7ff cyan
             INFO)    type_color=$'\033[38;2;168;168;168m' ;;  # #a8a8a8 gray
             SUCCESS) type_color=$'\033[38;2;95;215;0m'    ;;  # #5fd700 green
+            SKIP)    type_color=$'\033[38;2;95;95;95m'    ;;  # #5f5f5f dim gray
             WARNING) type_color=$'\033[38;2;255;175;0m'   ;;  # #ffaf00 amber
             FAILURE) type_color=$'\033[38;2;255;95;95m'   ;;  # #ff5f5f red
             *)       type_color="" ;;                          # unknown: no color

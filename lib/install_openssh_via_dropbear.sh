@@ -22,5 +22,9 @@ install_openssh_via_dropbear() {
         return 0
     fi
     echo_mmo FAILURE "OpenSSH install failed over dropbear." >&2
+    echo_mmo FAILURE "  Check: Sileo install finished (mobile must have a password set)," >&2
+    echo_mmo FAILURE "         SSH_PASS in .env matches what was entered during Sileo install" >&2
+    echo_mmo FAILURE "         (Permission-denied here usually means a stale password — re-run" >&2
+    echo_mmo FAILURE "         Sileo's password setup or update SSH_PASS in .env to match)." >&2
     return 1
 }
