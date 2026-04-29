@@ -37,7 +37,12 @@ case "${1:-}" in
     --verify-palera1n-installed|-vpi)
         source "$ROOT_DIR/lib/echo_mmo.sh"
         source "$ROOT_DIR/lib/verify_palera1n_installed.sh"
-        verify_palera1n_installed
+        if verify_palera1n_installed; then
+            echo_mmo SUCCESS "palera1n successfully installed on device."
+        else
+            echo_mmo FAILURE "palera1n not found on device." >&2
+            exit 1
+        fi
         ;;
     --kill-stale-palera1n|-ksp)
         source "$ROOT_DIR/lib/echo_mmo.sh"
