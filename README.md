@@ -62,7 +62,7 @@ Edit `.env` and fill in:
 - `WIFI_SSID` — the SSID the iPhone should auto-join
 - `WIFI_PASS` — WPA2 password
 - `USB_SSH_PORT` — local port for the iproxy tunnel (default `2222`)
-- `SSH_PASS` — the root password you will set during the Sileo install (conventionally `alpine1`)
+- `SSH_PASS` — the password you will set on the `mobile` user during the Sileo install (conventionally `alpine1`). All SSH/sudo from the Mac targets `mobile@…`; root login is permanently disabled on these palera1n builds.
 
 ---
 
@@ -107,7 +107,7 @@ When the pipeline finishes you should see `[MMO] [SUCCESS] Phone setup complete`
 
 ### Running subsets
 
-You rarely need this, but if something fails partway through you can re-run just one piece:
+If something fails partway through, you can re-run just one piece:
 
 ```bash
 mmo -s1      # just the jailbreak
@@ -121,7 +121,19 @@ mmo -vpi     # one-shot: is palera1n installed on this device right now?
 mmo -ksp     # cleanup: kill stale palera1n/checkra1n (prompts for sudo)
 ```
 
+Flags can be chained; they run in order and abort on the first failure:
+
+```bash
+mmo -s1 -s1v -s2 -s2v        # s1, then s1v, then s2, then s2v
+mmo -s1/v -s2/v              # same — `/v` is shorthand for "run the verify after"
+mmo -s2/v -s3/v              # everything past stage 1, with verifies
+```
+
 `mmo --help` lists everything.
+
+### Re-running on a partially-set-up phone
+
+Re-runs are safe. Each stage probes "is this step already done?" before doing the work and prints `[SKIP]` when it is — so `mmo -s2` on a phone that already has Sileo, OpenSSH, and Local Network granted will fast-forward through them without prompting again. Same for stage 1: if palera1n is already installed and launchable, the whole jailbreak is skipped. The probes look at *real* state on the device (binary launchability for palera1n, `IsActive=true` for the WiFi profile, a marker file for Local Network), not just metadata caches that might lie.
 
 ---
 
