@@ -14,6 +14,7 @@ wait_for_palera1n_installed() {
     local i seconds
     for i in $(seq 1 60); do
         if verify_palera1n_installed 2>/dev/null; then
+            echo_mmo SUCCESS "palera1n installed on device."
             return 0
         fi
         # Heartbeat at 30s, 60s, 90s, 120s, 150s — but not at 180s
