@@ -27,8 +27,11 @@ fi
 # Force the device into English BEFORE we jailbreak: phones that come from
 # sourcing in zh-Hans-CN would otherwise leave stage 2's "Settings > VPN &
 # Device Management" tap in Chinese. Idempotent — no-op if already en/en_US.
+# Non-fatal: on a first-time connection the phone may not have accepted the
+# Trust pairing prompt yet, so lockdownd refuses the language query. Continue
+# anyway; the operator can re-run `mmo -sdl` once lockdownd is reachable.
 CURRENT_STEP="device language preflight"
-set_device_language en en_US
+set_device_language en en_US || echo_mmo WARNING "Language preflight failed — continuing. Re-run \`mmo -sdl\` later if Settings menus aren't in English."
 
 CURRENT_STEP="kill stale palera1n/checkra1n"
 kill_stale_palera1n
